@@ -1,0 +1,704 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azavision �?" Panneau Administration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter','sans-serif'], serif: ['Playfair Display','serif'] },
+                    colors: {
+                        gold: { DEFAULT:'#C5A880', dark:'#A3855E', light:'#E8D5B7' },
+                        admin: { bg:'#0A0A0A', surface:'#111111', border:'#1E1E1E', card:'#161616' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root { --gold:#C5A880; --gold-dark:#A3855E; }
+        ::-webkit-scrollbar { width:5px; height:5px; }
+        ::-webkit-scrollbar-track { background:#0A0A0A; }
+        ::-webkit-scrollbar-thumb { background:#C5A880; border-radius:3px; }
+        .sidebar-link { transition: all .2s; border-left: 2px solid transparent; }
+        .sidebar-link.active { border-left-color: #C5A880; background: rgba(197,168,128,.08); color: #C5A880; }
+        .sidebar-link:hover:not(.active) { background: rgba(255,255,255,.04); }
+        .stat-card { background: linear-gradient(135deg, #161616 0%, #111111 100%); }
+        .badge-pending { background:rgba(245,158,11,.1); color:#f59e0b; border:1px solid rgba(245,158,11,.25); }
+        .badge-shipped { background:rgba(16,185,129,.1); color:#10b981; border:1px solid rgba(16,185,129,.25); }
+        .badge-cancelled { background:rgba(239,68,68,.1); color:#ef4444; border:1px solid rgba(239,68,68,.25); }
+        .badge-delivered { background:rgba(59,130,246,.1); color:#3b82f6; border:1px solid rgba(59,130,246,.25); }
+        .badge-paid { background:rgba(197,168,128,.12); color:#C5A880; border:1px solid rgba(197,168,128,.3); }
+        .tab-panel { display:none; }
+        .tab-panel.active { display:block; }
+        input, select, textarea { background:#0A0A0A; color:#e5e5e5; border:1px solid #2a2a2a; }
+        input:focus, select:focus, textarea:focus { outline:none; border-color:#C5A880; }
+        input::placeholder, textarea::placeholder { color:#555; }
+        .table-row:hover { background:rgba(255,255,255,.02); }
+        .modal-overlay { background:rgba(0,0,0,.85); backdrop-filter:blur(4px); }
+        @keyframes slideIn { from { transform:translateY(-10px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+        .slide-in { animation:slideIn .25s ease forwards; }
+        .chart-bar { transition:height .5s ease; }
+        .progress-ring { transform:rotate(-90deg); }
+    </style>
+</head>
+<body class="bg-admin-bg text-neutral-200 font-sans min-h-screen overflow-x-hidden">
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-admin-bg">
+    <div class="w-full max-w-sm px-8 py-12 text-center slide-in">
+        <div class="mb-8">
+            <div class="w-16 h-16 rounded-2xl bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto mb-5">
+                <i class="fa-solid fa-shield-halved text-gold text-2xl"></i>
+            </div>
+            <h1 class="font-serif text-3xl font-bold tracking-widest text-white uppercase mb-1">Azavision</h1>
+            <p class="text-[10px] uppercase tracking-[0.4em] text-gold">Portail Administration</p>
+        </div>
+
+        <div class="space-y-4">
+            <div class="text-left">
+                <label class="block text-[10px] uppercase tracking-wider text-neutral-500 mb-1.5">Identifiant</label>
+                <input type="text" id="login-user" value="admin" class="w-full px-4 py-3 rounded-lg text-sm">
+            </div>
+            <div class="text-left">
+                <label class="block text-[10px] uppercase tracking-wider text-neutral-500 mb-1.5">Mot de passe</label>
+                <div class="relative">
+                    <input type="password" id="login-pass" placeholder="azavision_admin" class="w-full px-4 py-3 rounded-lg text-sm pr-10" onkeydown="if(event.key==='Enter')doLogin()">
+                    <button onclick="togglePassVis()" class="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300">
+                        <i class="fa-regular fa-eye text-sm" id="eye-icon"></i>
+                    </button>
+                </div>
+            </div>
+            <p id="login-error" class="text-red-400 text-xs hidden">Identifiants incorrects.</p>
+            <button onclick="doLogin()" class="w-full py-3.5 bg-gold hover:bg-gold-dark text-neutral-950 font-bold text-xs uppercase tracking-widest rounded-lg transition duration-300 mt-2">
+                Accéder au tableau de bord <i class="fa-solid fa-arrow-right ml-2"></i>
+            </button>
+        </div>
+
+        <p class="text-[10px] text-neutral-600 mt-8">Mot de passe par défaut : <span class="text-neutral-400">azavision_admin</span></p>
+    </div>
+</div>
+
+<!-- MAIN ADMIN APP -->
+<div id="admin-app" class="hidden flex flex-col lg:flex-row min-h-screen">
+
+    <!-- SIDEBAR (Collapsible on mobile) -->
+    <aside id="sidebar-menu" class="w-full lg:w-60 flex-shrink-0 bg-admin-surface border-b lg:border-b-0 lg:border-r border-admin-border flex flex-col z-30">
+        <div class="px-6 py-7 border-b border-admin-border flex justify-between items-center">
+            <div>
+                <p class="font-serif text-lg font-bold tracking-widest text-white uppercase">Azavision</p>
+                <p class="text-[9px] uppercase tracking-[0.35em] text-gold mt-0.5">Administration</p>
+            </div>
+            <!-- Mobile Menu Toggle -->
+            <button onclick="toggleSidebarMobile()" class="lg:hidden text-neutral-400 hover:text-white">
+                <i class="fa-solid fa-bars text-xl"></i>
+            </button>
+        </div>
+
+        <nav id="nav-links" class="hidden lg:block flex-1 py-4 space-y-0.5 px-3">
+            <button onclick="showTab('dashboard')" class="sidebar-link active w-full text-left px-3 py-2.5 rounded-r-lg text-xs font-semibold uppercase tracking-wider flex items-center gap-3" id="nav-dashboard">
+                <i class="fa-solid fa-chart-line w-4 text-center"></i> Tableau de bord
+            </button>
+            <button onclick="showTab('produits')" class="sidebar-link w-full text-left px-3 py-2.5 rounded-r-lg text-xs font-semibold uppercase tracking-wider flex items-center gap-3 text-neutral-400" id="nav-produits">
+                <i class="fa-solid fa-shirt w-4 text-center"></i> Produits
+            </button>
+            <button onclick="showTab('commandes')" class="sidebar-link w-full text-left px-3 py-2.5 rounded-r-lg text-xs font-semibold uppercase tracking-wider flex items-center gap-3 text-neutral-400" id="nav-commandes">
+                <i class="fa-solid fa-list-check w-4 text-center"></i> Commandes
+                <span id="badge-pending-orders" class="ml-auto bg-amber-500 text-neutral-900 text-[9px] font-bold rounded-full px-1.5 py-0.5 hidden">0</span>
+            </button>
+            <button onclick="showTab('clients')" class="sidebar-link w-full text-left px-3 py-2.5 rounded-r-lg text-xs font-semibold uppercase tracking-wider flex items-center gap-3 text-neutral-400" id="nav-clients">
+                <i class="fa-solid fa-users w-4 text-center"></i> Clients
+            </button>
+            <button onclick="showTab('stocks')" class="sidebar-link w-full text-left px-3 py-2.5 rounded-r-lg text-xs font-semibold uppercase tracking-wider flex items-center gap-3 text-neutral-400" id="nav-stocks">
+                <i class="fa-solid fa-boxes-stacked w-4 text-center"></i> Stocks
+            </button>
+            <button onclick="showTab('promotions')" class="sidebar-link w-full text-left px-3 py-2.5 rounded-r-lg text-xs font-semibold uppercase tracking-wider flex items-center gap-3 text-neutral-400" id="nav-promotions">
+                <i class="fa-solid fa-tag w-4 text-center"></i> Promotions
+            </button>
+            <button onclick="showTab('analytics')" class="sidebar-link w-full text-left px-3 py-2.5 rounded-r-lg text-xs font-semibold uppercase tracking-wider flex items-center gap-3 text-neutral-400" id="nav-analytics">
+                <i class="fa-solid fa-chart-bar w-4 text-center"></i> Analytiques
+            </button>
+            <button onclick="showTab('config')" class="sidebar-link w-full text-left px-3 py-2.5 rounded-r-lg text-xs font-semibold uppercase tracking-wider flex items-center gap-3 text-neutral-400" id="nav-config">
+                <i class="fa-solid fa-gear w-4 text-center"></i> Configuration
+            </button>
+        </nav>
+
+        <div class="border-t border-admin-border px-4 py-4 hidden lg:block">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-8 h-8 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center">
+                    <i class="fa-solid fa-user text-gold text-xs"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-semibold text-white">Administrateur</p>
+                    <p class="text-[10px] text-neutral-500">admin@azavision.pt</p>
+                </div>
+            </div>
+            <a href="../client/index.html" target="_blank" class="w-full px-3 py-2 mb-2 text-[10px] uppercase tracking-wider text-neutral-500 hover:text-gold transition rounded flex items-center gap-2">
+                <i class="fa-solid fa-store text-xs"></i> Ouvrir la boutique
+            </a>
+            <button onclick="doLogout()" class="w-full px-3 py-2 text-[10px] uppercase tracking-wider text-neutral-500 hover:text-red-400 transition rounded flex items-center gap-2">
+                <i class="fa-solid fa-right-from-bracket text-xs"></i> Déconnexion
+            </button>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 min-h-screen">
+
+        <!-- TOP BAR -->
+        <div class="sticky top-0 z-20 bg-admin-surface/95 backdrop-blur border-b border-admin-border px-8 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+                <h2 class="text-sm font-bold text-white uppercase tracking-wider" id="page-title">Tableau de bord</h2>
+                <p class="text-[10px] text-neutral-500 mt-0.5" id="page-subtitle">Vue d'ensemble de la boutique</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-4 justify-end w-full md:w-auto">
+                <div id="api-status" class="flex items-center gap-2 text-[10px] text-neutral-500">
+                    <div class="w-1.5 h-1.5 rounded-full bg-amber-400"></div>
+                    Mode démo
+                </div>
+                <button onclick="syncData()" class="px-4 py-2 bg-gold/10 hover:bg-gold/20 text-gold text-[10px] uppercase font-bold tracking-wider rounded-lg transition border border-gold/20">
+                    <i class="fa-solid fa-rotate mr-1.5"></i> Synchroniser
+                </button>
+                <a href="../client/index.html" target="_blank" class="px-4 py-2 bg-white/5 hover:bg-white/10 text-neutral-300 text-[10px] uppercase font-bold tracking-wider rounded-lg transition border border-white/10">
+                    <i class="fa-solid fa-store mr-1.5"></i> Voir la boutique
+                </a>
+            </div>
+        </div>
+
+        <!-- ====== DASHBOARD TAB ====== -->
+        <div class="tab-panel active px-8 py-8" id="tab-dashboard">
+
+            <!-- STAT CARDS -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div class="stat-card rounded-xl p-5 border border-admin-border">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-10 h-10 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center">
+                            <i class="fa-solid fa-euro-sign text-green-400 text-sm"></i>
+                        </div>
+                        <span class="text-[10px] text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full font-semibold">+12%</span>
+                    </div>
+                    <p class="text-2xl font-bold text-white" id="stat-revenue">3 247 �,�</p>
+                    <p class="text-[10px] uppercase tracking-wider text-neutral-500 mt-1">Chiffre d'affaires</p>
+                </div>
+                <div class="stat-card rounded-xl p-5 border border-admin-border">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                            <i class="fa-solid fa-bag-shopping text-blue-400 text-sm"></i>
+                        </div>
+                        <span class="text-[10px] text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded-full font-semibold">+5</span>
+                    </div>
+                    <p class="text-2xl font-bold text-white" id="stat-orders">24</p>
+                    <p class="text-[10px] uppercase tracking-wider text-neutral-500 mt-1">Commandes totales</p>
+                </div>
+                <div class="stat-card rounded-xl p-5 border border-admin-border">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-10 h-10 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center">
+                            <i class="fa-solid fa-shirt text-gold text-sm"></i>
+                        </div>
+                        <span class="text-[10px] text-gold bg-gold/10 px-2 py-0.5 rounded-full font-semibold" id="stat-products-badge">4 refs</span>
+                    </div>
+                    <p class="text-2xl font-bold text-white" id="stat-products">44</p>
+                    <p class="text-[10px] uppercase tracking-wider text-neutral-500 mt-1">Articles en stock</p>
+                </div>
+                <div class="stat-card rounded-xl p-5 border border-admin-border">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
+                            <i class="fa-solid fa-clock text-purple-400 text-sm"></i>
+                        </div>
+                        <span class="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full font-semibold" id="stat-pending-badge">2</span>
+                    </div>
+                    <p class="text-2xl font-bold text-white" id="stat-pending">2</p>
+                    <p class="text-[10px] uppercase tracking-wider text-neutral-500 mt-1">En attente d'expédition</p>
+                </div>
+            </div>
+
+            <!-- RECENT ORDERS & TOP PRODUCTS -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 bg-admin-card rounded-xl border border-admin-border overflow-hidden">
+                    <div class="px-6 py-4 border-b border-admin-border flex items-center justify-between">
+                        <h3 class="text-xs font-bold uppercase tracking-wider">Commandes récentes</h3>
+                        <button onclick="showTab('commandes')" class="text-[10px] text-gold hover:underline">Voir tout</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b border-admin-border text-[9px] uppercase tracking-wider text-neutral-500">
+                                    <th class="px-6 py-3 text-left">Réf.</th>
+                                    <th class="px-4 py-3 text-left">Client</th>
+                                    <th class="px-4 py-3 text-left">Total</th>
+                                    <th class="px-4 py-3 text-left">Statut</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-orders-table"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="bg-admin-card rounded-xl border border-admin-border overflow-hidden">
+                    <div class="px-6 py-4 border-b border-admin-border">
+                        <h3 class="text-xs font-bold uppercase tracking-wider">Alertes stock</h3>
+                    </div>
+                    <div id="stock-alerts" class="divide-y divide-admin-border"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====== PRODUITS TAB ====== -->
+        <div class="tab-panel px-8 py-8" id="tab-produits">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center w-full sm:w-auto">
+                    <input type="text" id="prod-search" oninput="filterProducts()" placeholder="Rechercher un produit..." class="px-4 py-2 rounded-lg text-xs w-full sm:w-64">
+                    <select id="prod-cat-filter" onchange="filterProducts()" class="px-3 py-2 rounded-lg text-xs">
+                        <option value="">Toutes catégories</option>
+                        <option value="hommes">Hommes</option>
+                        <option value="femmes">Femmes</option>
+                        <option value="accessoires">Accessoires</option>
+                        <option value="enfants">Enfants</option>
+                        <option value="soldes">Soldes</option>
+                    </select>
+                </div>
+                <button onclick="openProductModal()" class="px-5 py-2.5 bg-gold hover:bg-gold-dark text-neutral-950 font-bold text-[10px] uppercase tracking-widest rounded-lg transition flex items-center gap-2">
+                    <i class="fa-solid fa-plus"></i> Nouveau produit
+                </button>
+            </div>
+
+            <div class="bg-admin-card rounded-xl border border-admin-border overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-admin-border text-[9px] uppercase tracking-wider text-neutral-500">
+                                <th class="px-6 py-4 text-left w-16">Image</th>
+                                <th class="px-4 py-4 text-left">Produit</th>
+                                <th class="px-4 py-4 text-left">Catégorie</th>
+                                <th class="px-4 py-4 text-left">Prix</th>
+                                <th class="px-4 py-4 text-left">Stock</th>
+                                <th class="px-4 py-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="products-table-body" class="divide-y divide-admin-border"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====== COMMANDES TAB ====== -->
+        <div class="tab-panel px-8 py-8" id="tab-commandes">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                    <input type="text" id="order-search" oninput="filterOrders()" placeholder="N° commande ou client..." class="px-4 py-2 rounded-lg text-xs w-full sm:w-56">
+                    <select id="order-status-filter" onchange="filterOrders()" class="px-3 py-2 rounded-lg text-xs">
+                        <option value="">Tous les statuts</option>
+                        <option value="En attente">En attente</option>
+                        <option value="Payé">Payé</option>
+                        <option value="Expédié">Expédié</option>
+                        <option value="Livré">Livré</option>
+                        <option value="Annulé">Annulé</option>
+                    </select>
+                </div>
+                <button onclick="exportOrders()" class="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-neutral-300 font-semibold text-[10px] uppercase tracking-wider rounded-lg transition border border-white/10 flex items-center gap-2">
+                    <i class="fa-solid fa-file-export"></i> Exporter CSV
+                </button>
+            </div>
+
+            <div class="bg-admin-card rounded-xl border border-admin-border overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-admin-border text-[9px] uppercase tracking-wider text-neutral-500">
+                                <th class="px-6 py-4 text-left">Commande</th>
+                                <th class="px-4 py-4 text-left">Client</th>
+                                <th class="px-4 py-4 text-left">Articles</th>
+                                <th class="px-4 py-4 text-left">Total</th>
+                                <th class="px-4 py-4 text-left">Statut</th>
+                                <th class="px-4 py-4 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-table-body" class="divide-y divide-admin-border"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====== CLIENTS TAB ====== -->
+        <div class="tab-panel px-8 py-8" id="tab-clients">
+            <div class="bg-admin-card rounded-xl border border-admin-border overflow-hidden">
+                <div class="px-6 py-4 border-b border-admin-border flex items-center justify-between">
+                    <h3 class="text-xs font-bold uppercase tracking-wider">Liste des clients</h3>
+                    <span id="clients-count" class="text-[10px] text-neutral-500"></span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-admin-border text-[9px] uppercase tracking-wider text-neutral-500">
+                                <th class="px-6 py-4 text-left">Client</th>
+                                <th class="px-4 py-4 text-left">E-mail</th>
+                                <th class="px-4 py-4 text-left">NIF</th>
+                                <th class="px-4 py-4 text-left">Compte</th>
+                                <th class="px-4 py-4 text-left">Commandes</th>
+                                <th class="px-4 py-4 text-left">Total depense</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clients-table-body" class="divide-y divide-admin-border"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====== STOCKS TAB ====== -->
+        <div class="tab-panel px-8 py-8" id="tab-stocks">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-admin-card rounded-xl border border-admin-border p-5">
+                    <p class="text-[10px] uppercase tracking-wider text-neutral-500 mb-1">Total en stock</p>
+                    <p class="text-3xl font-bold text-white" id="total-stock-count">�?"</p>
+                </div>
+                <div class="bg-admin-card rounded-xl border border-red-500/20 p-5">
+                    <p class="text-[10px] uppercase tracking-wider text-red-400 mb-1">Stock critique (�?�3)</p>
+                    <p class="text-3xl font-bold text-red-400" id="critical-stock-count">�?"</p>
+                </div>
+                <div class="bg-admin-card rounded-xl border border-amber-500/20 p-5">
+                    <p class="text-[10px] uppercase tracking-wider text-amber-400 mb-1">Ruptures</p>
+                    <p class="text-3xl font-bold text-amber-400" id="out-of-stock-count">�?"</p>
+                </div>
+            </div>
+
+            <div class="bg-admin-card rounded-xl border border-admin-border overflow-hidden">
+                <div class="px-6 py-4 border-b border-admin-border">
+                    <h3 class="text-xs font-bold uppercase tracking-wider">Gestion des stocks en direct</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-admin-border text-[9px] uppercase tracking-wider text-neutral-500">
+                                <th class="px-6 py-4 text-left">Produit</th>
+                                <th class="px-4 py-4 text-left">Catégorie</th>
+                                <th class="px-4 py-4 text-left">Stock actuel</th>
+                                <th class="px-4 py-4 text-left">Jauge</th>
+                                <th class="px-4 py-4 text-right">Modifier</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stocks-table-body" class="divide-y divide-admin-border"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====== PROMOTIONS TAB ====== -->
+        <div class="tab-panel px-8 py-8" id="tab-promotions">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="bg-admin-card rounded-xl border border-admin-border overflow-hidden">
+                    <div class="px-6 py-4 border-b border-admin-border flex items-center justify-between">
+                        <h3 class="text-xs font-bold uppercase tracking-wider">Codes Promotionnels</h3>
+                        <button onclick="openPromoModal()" class="px-3 py-1.5 bg-gold/10 text-gold text-[10px] uppercase font-bold rounded-lg border border-gold/20 hover:bg-gold/20 transition">
+                            <i class="fa-solid fa-plus mr-1"></i> Créer
+                        </button>
+                    </div>
+                    <div id="promo-codes-list" class="divide-y divide-admin-border"></div>
+                </div>
+
+                <div class="bg-admin-card rounded-xl border border-admin-border overflow-hidden">
+                    <div class="px-6 py-4 border-b border-admin-border">
+                        <h3 class="text-xs font-bold uppercase tracking-wider">Bannière Promotionnelle</h3>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div>
+                            <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Texte de la bannière</label>
+                            <input type="text" id="promo-banner-text" value="�o� Livraison offerte dès 150�,� �?� Code AZA10 : -10% sur votre première commande �o�" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                        </div>
+                        <div class="flex gap-3">
+                            <div class="flex-1">
+                                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Couleur fond</label>
+                                <input type="color" id="promo-banner-bg" value="#C5A880" class="w-full h-10 rounded-lg border border-admin-border cursor-pointer bg-transparent">
+                            </div>
+                            <div class="flex-1">
+                                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Activer</label>
+                                <button onclick="toggleBannerActive(this)" class="w-full h-10 rounded-lg border border-green-500/30 bg-green-500/10 text-green-400 text-xs font-bold uppercase tracking-wider">Active</button>
+                            </div>
+                        </div>
+                        <button onclick="saveBannerSettings()" class="w-full py-2.5 bg-gold text-neutral-950 font-bold text-[10px] uppercase tracking-wider rounded-lg hover:bg-gold-dark transition">Appliquer les modifications</button>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 bg-admin-card rounded-xl border border-admin-border overflow-hidden">
+                    <div class="px-6 py-4 border-b border-admin-border">
+                        <h3 class="text-xs font-bold uppercase tracking-wider">Ventes Privées & �?vénements</h3>
+                    </div>
+                    <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="space-y-3">
+                            <div>
+                                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Nom de l'événement</label>
+                                <input type="text" placeholder="Ex: Vente privée Automne 2026" class="w-full px-3 py-2.5 rounded-lg text-xs bg-admin-bg">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Date début</label>
+                                    <input type="date" class="w-full px-3 py-2.5 rounded-lg text-xs bg-admin-bg">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Date fin</label>
+                                    <input type="date" class="w-full px-3 py-2.5 rounded-lg text-xs bg-admin-bg">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Remise (%)</label>
+                                <input type="number" placeholder="15" class="w-full px-3 py-2.5 rounded-lg text-xs bg-admin-bg">
+                            </div>
+                            <button onclick="showAdminToast('�?vénement créé avec succès !')" class="w-full py-2.5 bg-gold text-neutral-950 font-bold text-[10px] uppercase tracking-wider rounded-lg hover:bg-gold-dark transition">Créer l'événement</button>
+                        </div>
+                        <div class="space-y-2">
+                            <p class="text-[10px] uppercase tracking-wider text-neutral-500 mb-2">�?vénements actifs</p>
+                            <div class="bg-admin-bg rounded-lg p-3 border border-admin-border flex items-center justify-between">
+                                <div>
+                                    <p class="text-xs font-semibold">Soldes �?té 2026</p>
+                                    <p class="text-[10px] text-neutral-500">01/06 �?' 31/07 �?� -20%</p>
+                                </div>
+                                <span class="text-[9px] bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 rounded-full font-bold">Active</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====== ANALYTIQUES TAB ====== -->
+        <div class="tab-panel px-8 py-8" id="tab-analytics">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="bg-admin-card rounded-xl border border-admin-border p-6">
+                    <h3 class="text-xs font-bold uppercase tracking-wider mb-6">Ventes par catégorie</h3>
+                    <div class="space-y-4" id="category-chart"></div>
+                </div>
+                <div class="bg-admin-card rounded-xl border border-admin-border p-6">
+                    <h3 class="text-xs font-bold uppercase tracking-wider mb-6">Revenus des 7 derniers jours</h3>
+                    <div class="flex items-end gap-2 h-40" id="revenue-chart"></div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-admin-card rounded-xl border border-admin-border p-5">
+                    <p class="text-[10px] uppercase tracking-wider text-neutral-500 mb-1">Panier moyen</p>
+                    <p class="text-2xl font-bold text-white">189 �,�</p>
+                    <p class="text-[10px] text-green-400 mt-1">�?' +8% vs mois dernier</p>
+                </div>
+                <div class="bg-admin-card rounded-xl border border-admin-border p-5">
+                    <p class="text-[10px] uppercase tracking-wider text-neutral-500 mb-1">Taux de conversion</p>
+                    <p class="text-2xl font-bold text-white">3.4%</p>
+                    <p class="text-[10px] text-green-400 mt-1">�?' +0.5% vs mois dernier</p>
+                </div>
+                <div class="bg-admin-card rounded-xl border border-admin-border p-5">
+                    <p class="text-[10px] uppercase tracking-wider text-neutral-500 mb-1">Visiteurs uniques</p>
+                    <p class="text-2xl font-bold text-white">1 204</p>
+                    <p class="text-[10px] text-neutral-500 mt-1">Cette semaine</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====== CONFIG TAB ====== -->
+        <div class="tab-panel px-8 py-8" id="tab-config">
+            <div class="max-w-2xl space-y-6">
+                <div class="bg-admin-card rounded-xl border border-admin-border p-6">
+                    <h3 class="text-xs font-bold uppercase tracking-wider mb-6 text-gold">Informations de la boutique</h3>
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Nom de l'enseigne</label>
+                                <input type="text" id="cfg-name" value="Azavision" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                            </div>
+                            <div>
+                                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">E-mail contact</label>
+                                <input type="email" id="cfg-email" value="contact@azavision.pt" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">TVA (%)</label>
+                                <input type="number" id="cfg-tva" value="23" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                            </div>
+                            <div>
+                                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Seuil livraison gratuite (�,�)</label>
+                                <input type="number" id="cfg-shipping" value="150" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Adresse de l'atelier</label>
+                            <input type="text" id="cfg-address" value="Rua Example 1, 1000-001 Lisboa, Portugal" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-admin-card rounded-xl border border-admin-border p-6">
+                    <h3 class="text-xs font-bold uppercase tracking-wider mb-6 text-gold">Sécurité & Accès</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Mot de passe actuel</label>
+                            <input type="password" id="cfg-old-pass" placeholder="�?��?��?��?��?��?��?��?��?��?��?��?�" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Nouveau mot de passe</label>
+                                <input type="password" id="cfg-new-pass" placeholder="Min. 8 caractères" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                            </div>
+                            <div>
+                                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Confirmer</label>
+                                <input type="password" id="cfg-confirm-pass" placeholder="Confirmer" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-admin-card rounded-xl border border-admin-border p-6">
+                    <h3 class="text-xs font-bold uppercase tracking-wider mb-6 text-gold">Paiements Portugal (Stripe + Eupago)</h3>
+                    <div class="space-y-4">
+                        <p class="text-[10px] text-neutral-500">Configurez les clés secrètes via le menu Google Sheets : <strong>Azavision �?' Configurer les clés API</strong>. La clé publique Stripe se configure ci-dessous dans le Sheet (onglet Configuration).</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div class="bg-admin-bg rounded-lg p-4 border border-admin-border">
+                                <p class="text-[10px] uppercase text-gold font-bold mb-1"><i class="fa-brands fa-stripe mr-1"></i> Stripe</p>
+                                <p class="text-[10px] text-neutral-500">Cartão Visa/Mastercard. Clé secrète dans Script Properties.</p>
+                            </div>
+                            <div class="bg-admin-bg rounded-lg p-4 border border-admin-border">
+                                <p class="text-[10px] uppercase text-gold font-bold mb-1"><i class="fa-solid fa-mobile-screen mr-1"></i> Eupago</p>
+                                <p class="text-[10px] text-neutral-500">MB Way + Multibanco. Chave API dans Script Properties.</p>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">NIF Entreprise (Portugal / Livro Reclamações)</label>
+                            <input type="text" id="cfg-nif" value="999999999" maxlength="9" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-admin-card rounded-xl border border-admin-border p-6">
+                    <h3 class="text-xs font-bold uppercase tracking-wider mb-6 text-gold">Facturation AT �?" Moloni (IVA 23%)</h3>
+                    <div class="space-y-3">
+                        <p class="text-[10px] text-neutral-500">Moloni émet automatiquement les faturas certifiées AT après paiement confirmé. Gratuit jusqu'à 100 faturas/mois. Credentials : menu Azavision �?' Configurer les clés API.</p>
+                        <div class="flex items-center gap-2 text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <span>Activez « Moloni �?" Activé (oui/non) » dans l'onglet Configuration du Google Sheet.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="saveConfig()" class="px-8 py-3 bg-gold hover:bg-gold-dark text-neutral-950 font-bold text-[10px] uppercase tracking-widest rounded-lg transition">
+                    <i class="fa-solid fa-check mr-2"></i> Enregistrer la configuration
+                </button>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<!-- TOAST -->
+<div id="admin-toast" class="fixed bottom-6 right-6 z-50 bg-neutral-900 text-white px-5 py-3.5 rounded-xl shadow-2xl border border-gold/30 flex items-center gap-3 text-sm font-semibold opacity-0 pointer-events-none transition-all duration-300 translate-y-4">
+    <i class="fa-solid fa-check text-gold"></i>
+    <span id="admin-toast-msg">Opération réussie</span>
+</div>
+
+<!-- PRODUCT MODAL -->
+<div id="product-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center">
+    <div class="modal-overlay absolute inset-0" onclick="closeProductModal()"></div>
+    <div class="relative bg-admin-surface rounded-2xl border border-admin-border w-full max-w-xl mx-4 shadow-2xl slide-in max-h-[90vh] overflow-y-auto">
+        <div class="px-6 py-5 border-b border-admin-border flex items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-wider" id="product-modal-title">Nouveau produit</h3>
+            <button onclick="closeProductModal()" class="text-neutral-500 hover:text-white transition">
+                <i class="fa-solid fa-times"></i>
+            </button>
+        </div>
+        <div class="p-6 space-y-4">
+            <input type="hidden" id="pm-editing-id">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">ID produit *</label>
+                    <input type="text" id="pm-id" placeholder="P005" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                </div>
+                <div>
+                    <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Catégorie *</label>
+                    <select id="pm-cat" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                        <option value="hommes">Hommes</option>
+                        <option value="femmes">Femmes</option>
+                        <option value="accessoires">Accessoires</option>
+                        <option value="enfants">Enfants</option>
+                        <option value="soldes">Soldes</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Nom du produit *</label>
+                <input type="text" id="pm-name" placeholder="Ex: Veste en lin naturel" class="w-full px-3 py-2.5 rounded-lg text-xs">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Prix (�,�) *</label>
+                    <input type="number" id="pm-price" placeholder="0.00" step="0.01" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                </div>
+                <div>
+                    <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Stock initial *</label>
+                    <input type="number" id="pm-stock" placeholder="0" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                </div>
+            </div>
+            <div>
+                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">URL de l'image</label>
+                <input type="url" id="pm-image" placeholder="https://..." class="w-full px-3 py-2.5 rounded-lg text-xs">
+            </div>
+            <div>
+                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Description</label>
+                <textarea id="pm-desc" placeholder="Description détaillée du produit..." class="w-full px-3 py-2.5 rounded-lg text-xs h-20 resize-none"></textarea>
+            </div>
+        </div>
+        <div class="px-6 py-4 border-t border-admin-border flex justify-end gap-3">
+            <button onclick="closeProductModal()" class="px-4 py-2.5 text-neutral-500 hover:text-neutral-200 text-[10px] uppercase font-bold tracking-wider transition">Annuler</button>
+            <button onclick="saveProduct()" class="px-6 py-2.5 bg-gold hover:bg-gold-dark text-neutral-950 font-bold text-[10px] uppercase tracking-wider rounded-lg transition">Enregistrer</button>
+        </div>
+    </div>
+</div>
+
+<!-- PROMO CODE MODAL -->
+<div id="promo-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center">
+    <div class="modal-overlay absolute inset-0" onclick="closePromoModal()"></div>
+    <div class="relative bg-admin-surface rounded-2xl border border-admin-border w-full max-w-sm mx-4 shadow-2xl slide-in">
+        <div class="px-6 py-5 border-b border-admin-border flex items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-wider">Nouveau code promo</h3>
+            <button onclick="closePromoModal()" class="text-neutral-500 hover:text-white transition"><i class="fa-solid fa-times"></i></button>
+        </div>
+        <div class="p-6 space-y-4">
+            <div>
+                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Code *</label>
+                <input type="text" id="promo-code" placeholder="AZA10" class="w-full px-3 py-2.5 rounded-lg text-xs uppercase">
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Type</label>
+                    <select id="promo-type" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                        <option value="percent">Pourcentage (%)</option>
+                        <option value="fixed">Montant fixe (�,�)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Valeur</label>
+                    <input type="number" id="promo-value" placeholder="10" class="w-full px-3 py-2.5 rounded-lg text-xs">
+                </div>
+            </div>
+            <div>
+                <label class="text-[10px] uppercase tracking-wider text-neutral-500 block mb-1.5">Utilisations max (0 = illimité)</label>
+                <input type="number" id="promo-uses" placeholder="0" class="w-full px-3 py-2.5 rounded-lg text-xs">
+            </div>
+        </div>
+        <div class="px-6 py-4 border-t border-admin-border flex justify-end gap-3">
+            <button onclick="closePromoModal()" class="px-4 py-2.5 text-neutral-500 hover:text-neutral-200 text-[10px] uppercase font-bold tracking-wider transition">Annuler</button>
+            <button onclick="savePromoCode()" class="px-6 py-2.5 bg-gold hover:bg-gold-dark text-neutral-950 font-bold text-[10px] uppercase tracking-wider rounded-lg transition">Créer le code</button>
+        </div>
+    </div>
+</div>
+
+    <!-- CONFIG API — colar URL /exec (igual a client/index.html) -->
+    <script>
+      var API_URL = 'https://script.google.com/macros/s/AKfycbx59FKS0TyivVRsPXnlFwZqqeMozvUEYY5ahZ3__L_krDi9x4ZbsL7TEhQ5heo5VdHqfA/exec';
+      var ERP_API_URL_DEFAULT = API_URL;
+    </script>
+    <script src="js/demo-store.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/admin-app.js"></script>
+</body>
+</html>
