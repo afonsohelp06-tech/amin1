@@ -23,7 +23,14 @@ const AzavisionAPI = {
     },
 
     async _fetch(url, options) {
-        const res = await fetch(url, options);
+        const opts = { ...options, redirect: 'follow' };
+        if (opts.method === 'POST' && opts.body) {
+            opts.headers = {
+                ...(opts.headers || {}),
+                'Content-Type': 'text/plain;charset=utf-8'
+            };
+        }
+        const res = await fetch(url, opts);
         const text = await res.text();
         try {
             return JSON.parse(text);

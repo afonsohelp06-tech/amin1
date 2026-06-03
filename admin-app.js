@@ -41,7 +41,7 @@ function loadConfigFormFromStore() {
     set('cfg-email', cfg["E-mail de contact client"] || 'contact@azavision.pt');
     const tva = String(cfg["TVA applicable (%)"] || '23').replace('%', '').trim();
     set('cfg-tva', parseFloat(tva) || 23);
-    const ship = String(cfg["Seuil livraison gratuite (€)"] || '150').replace(' €', '').trim();
+    const ship = String(cfg["Seuil livraison gratuite (€)"] || '150').replace(/\s*€\s*/g, '').trim();
     set('cfg-shipping', parseFloat(ship) || 150);
     set('cfg-nif', cfg["NIF Entreprise (Portugal)"] || '999999999');
 }
@@ -57,7 +57,7 @@ function togglePassVis() {
 }
 
 function doLogin() {
-    const pass = document.getElementById('login-pass').value;
+    const pass = (document.getElementById('login-pass').value || '').trim();
     if (pass === ADMIN_CONFIG.password) {
         document.getElementById('login-screen').style.opacity = '0';
         document.getElementById('login-screen').style.pointerEvents = 'none';
@@ -71,7 +71,7 @@ function doLogin() {
 }
 
 function doLogout() {
-    location.réeload();
+    location.reload();
 }
 
 // ============================================================
@@ -130,9 +130,31 @@ function updateApiStatusDisplay() {
     const status = document.getElementById('api-status');
     if (!status) return;
     if (AzavisionAPI.isLive()) {
-        status.innerHTML = '<div class="w-1.5 h-1.5 rounded-full bg-green-400"></div> Google Sheets connecté�';
+        status.innerHTML = '<div class="w-1.5 h-1.5 rounded-full bg-green-400"></div> API connectee';
     } else {
-        status.innerHTML = '<div class="w-1.5 h-1.5 rounded-full bg-amber-400"></div> Mode d�mo';
+        status.innerHTML = '<div class="w-1.5 h-1.5 rounded-full bg-amber-400"></div> Mode local';
+    }
+}
+
+function refreshActiveTab() {
+    const active = TABS.find(t => {
+        const el = document.getElementById('tab-' + t);
+        return el && el.classList.contains('active');
+    });
+    if (active) showTab(active);
+}
+
+function loadDemoStore() {
+    STORE.products = DemoStore.getProducts();
+    STORE.orders = DemoStore.getOrders();
+    STORE.accounts = DemoStore.getAccounts();
+    STORE.promoCodes = DemoStore.getPromos();
+    if (!STORE.promoCodes.length) {
+        STORE.promoCodes = [
+            { code: 'AZA10', type: 'percent', value: 10, uses: 0, maxUses: 0, active: true },
+            { code: 'LISBOA20', type: 'percent', value: 20, uses: 0, maxUses: 50, active: true }
+        ];
+        persistDemoPromos();
     }
 }
 
@@ -140,23 +162,14 @@ function initAdminApp() {
     DemoStore.init();
     updateApiStatusDisplay();
     loadConfigFormFromStore();
+    renderPromoCodes();
     if (AzavisionAPI.isLive()) {
         syncData();
     } else {
-        STORE.products = DemoStore.getProducts();
-        STORE.orders = DemoStore.getOrders();
-        STORE.accounts = DemoStore.getAccounts();
-        STORE.promoCodes = DemoStore.getPromos();
-        if (!STORE.promoCodes.length) {
-            STORE.promoCodes = [
-                { code: 'AZA10', type: 'percent', value: 10, uses: 0, maxUses: 0, active: true },
-                { code: 'LISBOA20', type: 'percent', value: 20, uses: 0, maxUses: 50, active: true }
-            ];
-            persistDemoPromos();
-        }
+        loadDemoStore();
         renderDashboard();
+        refreshActiveTab();
     }
-    renderPromoCodes();
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible' && !AzavisionAPI.isLive()) {
             STORE.orders = DemoStore.getOrders();
@@ -174,21 +187,21 @@ async function syncData() {
             AzavisionAPI.getOrders(),
             AzavisionAPI.getAccounts()
         ]);
-        if (prodRes.status === 'success') STORE.products = prodRes.data;
-        if (ordRes.status === 'success') STORE.orders = ordRes.orders;
-        if (accRes.status === 'success') STORE.accounts = accRes.accounts;
-        if (!AzavisionAPI.isLive()) {
-            DemoStore.saveProducts(STORE.products);
-            DemoStore.saveOrders(STORE.orders);
-        }
+        if (prodRes.status === 'success' && prodRes.data) STORE.products = prodRes.data;
+        if (ordRes.status === 'success' && ordRes.orders) STORE.orders = ordRes.orders;
+        if (accRes.status === 'success' && accRes.accounts) STORE.accounts = accRes.accounts;
         renderDashboard();
-        if (document.getElementById('tab-produits').classList.contains('active')) renderProductsTable();
-        if (document.getElementById('tab-commandes').classList.contains('active')) renderOrdersTable();
-        showAdminToast(AzavisionAPI.isLive() ? 'Donn�es synchronis�es (Google Sheets).' : 'Donn�es recharg�es (demo local).');
+        refreshActiveTab();
+        showAdminToast('Donnees synchronisees.');
     } catch (e) {
-        showAdminToast('Erreur de synchronisation.', true);
+        console.error('syncData', e);
+        loadDemoStore();
+        renderDashboard();
+        refreshActiveTab();
+        showAdminToast('Synchronisation API impossible — affichage local.', true);
     }
 }
+
 
 // ============================================================
 // DASHBOARD
@@ -198,7 +211,7 @@ function renderDashboard() {
     const totalRevenue = STORE.orders.reduce((s, o) => s + parseFloat(o.total || 0), 0);
     const pending = STORE.orders.filter(o => o.statut === 'En attente').length;
 
-    document.getElementById('stat-revenue').textContent = totalRevenue.toLocaleString('fr-FR') + ' €';
+    document.getElementById('stat-revenue').textContent = totalRevenue.toLocaleString('fr-FR') + ' EUR';
     document.getElementById('stat-orders').textContent = STORE.orders.length;
     document.getElementById('stat-products').textContent = totalStock;
     document.getElementById('stat-products-badge').textContent = STORE.products.length + ' refs';
@@ -387,7 +400,7 @@ function duplicateProduct(id) {
 }
 
 function deleteProduct(id) {
-    if (!confirm('Supprimer d�finitivement ce produit  €')) return;
+    if (!confirm('Supprimer definitivement ce produit ?')) return;
     const idx = STORE.products.findIndex(p => p.id === id);
     if (idx > -1) {
         STORE.products.splice(idx, 1);
@@ -428,11 +441,11 @@ function renderOrdersTable(list) {
             </td>
             <td class="px-4 py-4 text-right">
                 <select onchange="updateOrderStatus('${o.id_commande}', this.value)" class="px-2 py-1.5 rounded-lg text-[10px] font-semibold uppercase tracking-wider bg-admin-bg border-admin-border">
-                    <option value="En attente" ${o.statut==='En attente' €'selected':''}>En attente</option>
-                    <option value="Payé�" ${o.statut==='Payé�' €'selected':''}>Payé�</option>
-                    <option value="Exp�di�" ${o.statut==='Exp�di�' €'selected':''}>Exp�di�</option>
-                    <option value="Livré�" ${o.statut==='Livré�' €'selected':''}>Livré�</option>
-                    <option value="Annulé�" ${o.statut==='Annulé�' €'selected':''}>Annulé�</option>
+                    <option value="En attente" ${o.statut==='En attente' ? 'selected' : ''}>En attente</option>
+                    <option value="Pay\u00e9" ${o.statut==='Pay\u00e9' ? 'selected' : ''}>Pay\u00e9</option>
+                    <option value="Exp\u00e9di\u00e9" ${o.statut==='Exp\u00e9di\u00e9' ? 'selected' : ''}>Exp\u00e9di\u00e9</option>
+                    <option value="Livr\u00e9" ${o.statut==='Livr\u00e9' ? 'selected' : ''}>Livr\u00e9</option>
+                    <option value="Annul\u00e9" ${o.statut==='Annul\u00e9' ? 'selected' : ''}>Annul\u00e9</option>
                 </select>
             </td>
         `;
@@ -456,7 +469,7 @@ function updateOrderStatus(id, newStatus) {
     if (o) {
         o.statut = newStatus;
         renderDashboard();
-        showAdminToast(`Commande ${id} €' ${newStatus}`);
+        showAdminToast(`Commande ${id} -> ${newStatus}`);
         AzavisionAPI.updateOrderStatus(id, newStatus).catch(() => {});
         persistDemoOrders();
         renderOrdersTable();
@@ -548,7 +561,7 @@ function renderStocksTable() {
                 <p class="text-[10px] text-neutral-500">${p.id}</p>
             </td>
             <td class="px-4 py-4 text-[10px] text-neutral-400 uppercase tracking-wider">${p.categorie}</td>
-            <td class="px-4 py-4 text-xs font-bold ${stockInt===0 €'text-red-400':stockInt<=3 €'text-amber-400':'text-white'}">${stockInt}</td>
+            <td class="px-4 py-4 text-xs font-bold ${stockInt===0 ? 'text-red-400' : stockInt<=3 ? 'text-amber-400' : 'text-white'}">${stockInt}</td>
             <td class="px-4 py-4 w-32">
                 <div class="h-1.5 bg-admin-border rounded-full overflow-hidden">
                     <div class="h-full ${barColor} rounded-full transition-all duration-500" style="width:${pct}%"></div>
@@ -556,9 +569,9 @@ function renderStocksTable() {
             </td>
             <td class="px-4 py-4 text-right">
                 <div class="flex items-center justify-end gap-2">
-                    <button onclick="adéjàustStock('${p.id}', -1)" class="w-7 h-7 rounded bg-white/5 hover:bg-white/10 text-neutral-300 transition text-xs">-</button>
+                    <button onclick="adjustStock('${p.id}', -1)" class="w-7 h-7 rounded bg-white/5 hover:bg-white/10 text-neutral-300 transition text-xs">-</button>
                     <span class="w-8 text-center text-xs font-bold" id="stock-display-${p.id}">${stockInt}</span>
-                    <button onclick="adéjàustStock('${p.id}', 1)" class="w-7 h-7 rounded bg-white/5 hover:bg-white/10 text-neutral-300 transition text-xs">+</button>
+                    <button onclick="adjustStock('${p.id}', 1)" class="w-7 h-7 rounded bg-white/5 hover:bg-white/10 text-neutral-300 transition text-xs">+</button>
                     <button onclick="setStockManual('${p.id}')" class="px-3 h-7 rounded bg-gold/10 text-gold hover:bg-gold/20 transition text-[10px] uppercase font-bold border border-gold/20">D�finir</button>
                 </div>
             </td>
@@ -567,7 +580,7 @@ function renderStocksTable() {
     });
 }
 
-function adéjàustStock(id, delta) {
+function adjustStock(id, delta) {
     const p = STORE.products.find(p => p.id === id);
     if (!p) return;
     p.stock = Math.max(0, parseInt(p.stock) + delta);
@@ -606,7 +619,7 @@ function renderPromoCodes() {
             <div class="px-6 py-4 flex items-center justify-between">
                 <div>
                     <p class="text-xs font-bold text-gold font-mono tracking-widest">${pc.code}</p>
-                    <p class="text-[10px] text-neutral-500">${pc.type === 'percent' ? '-' + pc.value + '%' : '-' + pc.value + ' € €'} € € ${pc.uses} utilisations${pc.maxUses>0 €' / '+pc.maxUses:''}</p>
+                    <p class="text-[10px] text-neutral-500">${pc.type === 'percent' ? '-' + pc.value + '%' : '-' + pc.value + ' EUR'} - ${pc.uses} utilisations${pc.maxUses > 0 ? ' / ' + pc.maxUses : ''}</p>
                 </div>
                 <div class="flex items-center gap-2">
                     <button onclick="togglePromo(${i})" class="w-8 h-8 rounded-lg flex items-center justify-center transition text-xs ${isActive ? 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-red-500/10 hover:text-red-400' : 'bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-green-500/10 hover:text-green-400'}">
@@ -686,7 +699,7 @@ function renderAnalytics() {
         revDiv.innerHTML += `
             <div class="flex-1 flex flex-col items-center gap-1">
                 <span class="text-[9px] text-neutral-500">${vals[i]} €</span>
-                <div class="w-full rounded-t bg-gold/20 border border-gold/30 réelative" style="height:${pct}%">
+                <div class="w-full rounded-t bg-gold/20 border border-gold/30 relative" style="height:${pct}%">
                     <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-gold-dark to-gold rounded-t" style="height:100%"></div>
                 </div>
                 <span class="text-[9px] text-neutral-500 uppercase">${d}</span>
@@ -740,3 +753,33 @@ function showAdminToast(msg, isError = false) {
         toast.style.pointerEvents = 'none';
     }, 3500);
 }
+
+window.showTab = showTab;
+window.syncData = syncData;
+window.doLogin = doLogin;
+window.togglePassVis = togglePassVis;
+window.doLogout = doLogout;
+window.toggleSidebarMobile = toggleSidebarMobile;
+window.openProductModal = openProductModal;
+window.closeProductModal = closeProductModal;
+window.saveProduct = saveProduct;
+window.editProduct = editProduct;
+window.duplicateProduct = duplicateProduct;
+window.deleteProduct = deleteProduct;
+window.filterProducts = filterProducts;
+window.renderOrdersTable = renderOrdersTable;
+window.filterOrders = filterOrders;
+window.updateOrderStatus = updateOrderStatus;
+window.exportOrders = exportOrders;
+window.renderClientsTable = renderClientsTable;
+window.adjustStock = adjustStock;
+window.setStockManual = setStockManual;
+window.openPromoModal = openPromoModal;
+window.closePromoModal = closePromoModal;
+window.savePromoCode = savePromoCode;
+window.togglePromo = togglePromo;
+window.deletePromo = deletePromo;
+window.toggleBannerActive = toggleBannerActive;
+window.saveBannerSettings = saveBannerSettings;
+window.saveConfig = saveConfig;
+window.showAdminToast = showAdminToast;
